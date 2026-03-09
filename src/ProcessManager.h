@@ -23,6 +23,13 @@ private:
     std::vector<PCB> processes;
     int nextPid;
 
+    // 安全的字符串转整数，失败时返回默认值
+    static int safeStoi(const std::string& s, int defaultVal) {
+        if (s.empty()) return defaultVal;
+        try { return std::stoi(s); }
+        catch (...) { return defaultVal; }
+    }
+
 public:
     ProcessManager() : nextPid(1) {}
 
@@ -93,7 +100,14 @@ public:
             p.pid = nextPid++;
             std::cout << "  进程 " << i + 1 << " (PID=" << p.pid << "): ";
 
-            std::cin >> p.name >> p.arrivalTime >> p.burstTime >> p.priority;
+            if (!(std::cin >> p.name >> p.arrivalTime >> p.burstTime >> p.priority)) {
+                std::cin.clear();
+                std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+                std::cout << "  输入格式错误，请重新输入此进程。\n";
+                nextPid--;
+                i--;
+                continue;
+            }
 
             if (p.arrivalTime < 0) p.arrivalTime = 0;
             if (p.burstTime <= 0) p.burstTime = 1;
@@ -122,15 +136,15 @@ public:
         std::string input;
         std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
         std::getline(std::cin, input);
-        maxArrival = input.empty() ? 20 : std::stoi(input);
+        maxArrival = safeStoi(input, 20);
 
         std::cout << "  最大服务时间 (默认15): ";
         std::getline(std::cin, input);
-        maxBurst = input.empty() ? 15 : std::stoi(input);
+        maxBurst = safeStoi(input, 15);
 
         std::cout << "  最大优先级数值 (默认10): ";
         std::getline(std::cin, input);
-        maxPriority = input.empty() ? 10 : std::stoi(input);
+        maxPriority = safeStoi(input, 10);
 
         // 使用随机数引擎
         std::mt19937 gen(static_cast<unsigned int>(std::time(nullptr)));

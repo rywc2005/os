@@ -74,6 +74,19 @@ public:
     Scheduler(const std::string& name) : algorithmName(name), currentTime(0) {}
     virtual ~Scheduler() {}
 
+    // 计算 UTF-8 字符串在终端的显示宽度（CJK字符占2列）
+    static int displayWidth(const std::string& s) {
+        int width = 0;
+        for (size_t i = 0; i < s.size(); ) {
+            unsigned char c = s[i];
+            if (c < 0x80) { width += 1; i += 1; }
+            else if (c < 0xE0) { width += 1; i += 2; }
+            else if (c < 0xF0) { width += 2; i += 3; }
+            else { width += 2; i += 4; }
+        }
+        return width;
+    }
+
     // 设置进程列表
     void setProcesses(const std::vector<PCB>& procs) {
         processes = procs;
@@ -103,8 +116,9 @@ public:
     void printResults() const {
         std::cout << "\n╔══════════════════════════════════════════════════════"
                   << "══════════════════════════════════════╗\n";
+        int titlePad = std::max(1, 72 - displayWidth(algorithmName));
         std::cout << "║           " << algorithmName << " 调度结果"
-                  << std::string(60 - algorithmName.length() * 1.5, ' ') << "║\n";
+                  << std::string(titlePad, ' ') << "║\n";
         std::cout << "╠══════════════════════════════════════════════════════"
                   << "══════════════════════════════════════╣\n";
 
@@ -179,7 +193,7 @@ public:
             std::string label = event.processName;
             if (label == "IDLE") label = "空闲";
 
-            int padding = width - static_cast<int>(label.length());
+            int padding = width - displayWidth(label);
             int leftPad = padding / 2;
             int rightPad = padding - leftPad;
 

@@ -94,9 +94,7 @@ public:
 
             recordEvent(current->name, startExec, currentTime);
 
-            // 在时间片执行期间到达的新进程先加入就绪队列
-            // 这保证了新到达的进程排在被轮转进程之前是错误的
-            // 正确的 RR: 新进程加入后，当前进程如果未完成才排到队尾
+            // 新到达的进程先加入就绪队列，当前进程未完成时再排到队尾
             while (nextAdmitIndex < n &&
                    processes[nextAdmitIndex].arrivalTime <= currentTime) {
                 processes[nextAdmitIndex].state = ProcessState::READY;

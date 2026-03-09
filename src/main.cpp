@@ -29,6 +29,7 @@
 #include <iomanip>
 #include <limits>
 #include <memory>
+#include <sstream>
 #include <cstdlib>
 
 // 引入各模块头文件
@@ -119,6 +120,7 @@ void showMainMenu() {
     cout << "  │  [3] 多算法对比分析                                │\n";
     cout << "  │  [4] 查看算法说明                                  │\n";
     cout << "  │  [5] 运行演示模式（预设数据 + 全部算法）           │\n";
+    cout << "  │  [6] RR 时间片影响分析                             │\n";
     cout << "  │  [0] 退出系统                                      │\n";
     cout << "  │                                                    │\n";
     cout << "  └────────────────────────────────────────────────────┘\n";
@@ -243,19 +245,19 @@ void runSingleAlgorithm() {
     processManager.displayProcesses();
 
     // 创建对应的调度器并执行
-    Scheduler* scheduler = nullptr;
+    unique_ptr<Scheduler> scheduler;
 
     switch (choice) {
         case 1: {
-            scheduler = new FCFS_Scheduler();
+            scheduler.reset(new FCFS_Scheduler());
             break;
         }
         case 2: {
-            scheduler = new SJF_Scheduler(false);
+            scheduler.reset(new SJF_Scheduler(false));
             break;
         }
         case 3: {
-            scheduler = new SJF_Scheduler(true);
+            scheduler.reset(new SJF_Scheduler(true));
             break;
         }
         case 4: {
@@ -264,7 +266,7 @@ void runSingleAlgorithm() {
             int a;
             cin >> a;
             aging = (a == 1);
-            scheduler = new Priority_Scheduler(false, aging);
+            scheduler.reset(new Priority_Scheduler(false, aging));
             break;
         }
         case 5: {
@@ -273,16 +275,16 @@ void runSingleAlgorithm() {
             int a;
             cin >> a;
             aging = (a == 1);
-            scheduler = new Priority_Scheduler(true, aging);
+            scheduler.reset(new Priority_Scheduler(true, aging));
             break;
         }
         case 6: {
             int quantum = readInt("  请输入时间片大小 (1~20): ", 1, 20);
-            scheduler = new RR_Scheduler(quantum);
+            scheduler.reset(new RR_Scheduler(quantum));
             break;
         }
         case 7: {
-            scheduler = new HRRN_Scheduler();
+            scheduler.reset(new HRRN_Scheduler());
             break;
         }
         case 8: {
@@ -307,7 +309,7 @@ void runSingleAlgorithm() {
             } else {
                 mlfq->setBoost(false);
             }
-            scheduler = mlfq;
+            scheduler.reset(mlfq);
             break;
         }
     }
@@ -326,10 +328,8 @@ void runSingleAlgorithm() {
         int showDetail;
         cin >> showDetail;
         if (showDetail == 1) {
-            printDetailedLog(scheduler);
+            printDetailedLog(scheduler.get());
         }
-
-        delete scheduler;
     }
 
     pauseScreen();
@@ -424,7 +424,7 @@ void runComparison() {
     }
 
     // 创建调度器列表
-    vector<Scheduler*> schedulerList;
+    vector<unique_ptr<Scheduler>> schedulerList;
 
     for (int algo : selectedAlgos) {
         Scheduler* s = nullptr;
@@ -443,14 +443,14 @@ void runComparison() {
                 break;
             }
         }
-        if (s) schedulerList.push_back(s);
+        if (s) schedulerList.emplace_back(s);
     }
 
     // 设置比较器
     comparator.clearSchedulers();
     comparator.setProcesses(processManager.getProcesses());
-    for (auto* s : schedulerList) {
-        comparator.addScheduler(s);
+    for (auto& s : schedulerList) {
+        comparator.addScheduler(s.get());
     }
 
     // 执行对比
@@ -476,11 +476,6 @@ void runComparison() {
 
     // 显示推荐
     comparator.printRecommendation();
-
-    // 清理
-    for (auto* s : schedulerList) {
-        delete s;
-    }
 
     pauseScreen();
 }
@@ -709,7 +704,7 @@ int main() {
 
     while (true) {
         showMainMenu();
-        int choice = readInt("  请选择功能: ", 0, 5);
+        int choice = readInt("  请选择功能: ", 0, 6);
 
         switch (choice) {
             case 1:
@@ -726,6 +721,9 @@ int main() {
                 break;
             case 5:
                 runDemoMode();
+                break;
+            case 6:
+                analyzeTimeQuantumEffect();
                 break;
             case 0:
                 cout << "\n  感谢使用进程调度算法模拟系统！再见！\n\n";
