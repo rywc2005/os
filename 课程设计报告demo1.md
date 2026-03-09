@@ -1320,6 +1320,10 @@ FCFS Gantt 图：
 
 不同调度算法本质上是在多个维度（公平性、响应时间、吞吐量、复杂度）之间的权衡。没有绝对"最好"的算法，只有最适合特定场景的算法。这种权衡思维在其他系统设计中同样适用。
 
+**（5）认识代码审查与持续改进的价值**
+
+在项目基本完成后，通过系统性的代码审查发现了多个潜在缺陷——包括 2 个会导致程序崩溃的致命 Bug（UTF-8 宽度计算下溢、`std::stoi` 无异常保护）、1 个已实现却无法调用的功能、1 个内存安全隐患（裸指针泄漏风险）等共计 11 个问题。这些问题在日常测试中不易触发，但在特定输入条件下必然暴露。这让我深刻意识到：**代码"能运行"不等于"没问题"**，系统性的审查和防御性编程同样是软件工程的核心能力。
+
 ### 6.2 开发过程中遇到的问题及解决方案
 
 **问题 1：抢占式算法中连续事件碎片化**
@@ -1352,12 +1356,78 @@ FCFS Gantt 图：
 
 **解决方案**：在 main 函数中通过 `system("chcp 65001 >nul 2>&1")` 设置控制台编码为 UTF-8。
 
+**问题 6：`printResults()` 中文标题填充长度下溢导致崩溃**
+
+在代码审查阶段发现，`printResults()` 方法中标题行的填充空格计算使用了 `algorithmName.length() * 1.5` 的经验公式。然而 `std::string::length()` 返回的是字节数而非显示宽度，UTF-8 编码下中文字符每个占 3 字节但仅显示 2 列宽。当算法名较长时（如 MLFQ 的名称 `"多级反馈队列(MLFQ, 3级, q=1/2/4)"` 的 `length()` 约为 48 字节），`48 × 1.5 = 72 > 60`，计算结果下溢为极大的 `size_t` 值（无符号整数回绕），导致试图分配数 GB 内存而崩溃。
+
+**解决方案**：在 `Scheduler.h` 中新增 `displayWidth()` 静态方法，通过分析 UTF-8 字节头判断每个字符的显示宽度（ASCII 占 1 列，CJK 占 2 列），替代原有的经验公式。标题填充改为 `std::max(1, 72 - displayWidth(algorithmName))`。同时修复了 Gantt 图中"空闲"标签的宽度对齐问题。
+
+```cpp
+static int displayWidth(const std::string& s) {
+    int width = 0;
+    for (size_t i = 0; i < s.size(); ) {
+        unsigned char c = s[i];
+        if (c < 0x80)      { width += 1; i += 1; }
+        else if (c < 0xE0) { width += 1; i += 2; }
+        else if (c < 0xF0) { width += 2; i += 3; }
+        else               { width += 2; i += 4; }
+    }
+    return width;
+}
+```
+
+**问题 7：`std::stoi` 无异常保护导致非法输入崩溃**
+
+`ProcessManager::generateRandomProcesses()` 中使用 `std::stoi()` 解析用户输入的数字参数。当用户输入非数字字符串时，`std::stoi` 抛出 `std::invalid_argument` 异常，程序因未捕获该异常而直接终止。
+
+**解决方案**：新增 `safeStoi()` 私有静态方法，内部用 try-catch 包裹 `std::stoi`，非法输入时回退到默认值而非崩溃。三处 `std::stoi` 调用全部替换为 `safeStoi`。
+
+```cpp
+static int safeStoi(const std::string& s, int defaultVal) {
+    if (s.empty()) return defaultVal;
+    try { return std::stoi(s); }
+    catch (...) { return defaultVal; }
+}
+```
+
+**问题 8：裸指针 `new`/`delete` 的内存泄漏风险**
+
+`main.cpp` 的 `runSingleAlgorithm()` 和 `runComparison()` 中使用了 `new`/`delete` 手动管理调度器对象。若在 `new` 与 `delete` 之间发生异常（如 `bad_alloc`、`cin` 错误等），`delete` 不会被执行，导致内存泄漏。
+
+**解决方案**：将裸指针改为 `std::unique_ptr<Scheduler>`，利用 RAII 机制确保对象在任何执行路径下都能被正确释放。`runComparison()` 中的 `vector<Scheduler*>` 同理改为 `vector<unique_ptr<Scheduler>>`，移除手动 `delete` 循环。
+
+**问题 9：已实现功能无菜单入口**
+
+`main.cpp` 中已完整实现了 `analyzeTimeQuantumEffect()` 函数（分析 9 种不同时间片大小对 RR 调度性能的影响并绘制趋势图），但主菜单仅提供 `[1]~[5]` 和 `[0]` 共 6 个选项，遗漏了此功能的入口，导致用户无法触发该功能。
+
+**解决方案**：在主菜单新增选项 `[6] RR 时间片影响分析`，`readInt` 范围调整为 `0~6`，`switch` 语句新增 `case 6` 调用 `analyzeTimeQuantumEffect()`。
+
+**问题 10：批量输入进程时无错误恢复**
+
+`ProcessManager::addMultipleProcesses()` 中使用 `cin >> ...` 连续读取多个字段，若用户在数字字段输入了字母，`cin` 进入失败状态后不会自动恢复，后续所有输入操作将静默失败，导致程序行为异常且用户无法感知。
+
+**解决方案**：在输入失败时调用 `cin.clear()` 清除错误状态并用 `cin.ignore()` 丢弃错误行，回退 PID 和循环计数器，提示用户输入格式错误并允许重新输入。
+
+```cpp
+if (!(std::cin >> p.name >> p.arrivalTime >> p.burstTime >> p.priority)) {
+    std::cin.clear();
+    std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+    std::cout << "  输入格式错误，请重新输入此进程。\n";
+    nextPid--;
+    i--;
+    continue;
+}
+```
+
 ### 6.3 不足之处
 
 1. **缺少图形界面**：当前系统为纯控制台文本界面，虽然使用了 Unicode 字符美化，但可视化效果有限。
 2. **不支持 I/O 调度**：系统仅模拟 CPU 调度，未考虑进程的 I/O 操作和阻塞状态转换。
 3. **性能分析偏理论**：调度算法在模拟环境下运行，与真实操作系统中的调度存在差距（如未考虑上下文切换开销、缓存影响等）。
 4. **缺乏动态交互**：无法在调度执行过程中动态添加或修改进程。
+5. **编译脚本可移植性差**：`build.bat` 中编译器路径硬编码为绝对路径，在其他开发环境下需手动修改。
+6. **基类存在未调用方法**：`Scheduler::admitNewProcesses()` 在基类中定义但所有子类均自行实现进程入队逻辑，属于冗余代码。
+7. **就绪队列数据结构可优化**：`ProcessQueue` 底层使用 `std::vector`，其 `dequeue()` 操作为 O(n) 复杂度，使用 `std::deque` 更符合队列语义且出队性能更高。
 
 ### 6.4 改进设想
 
@@ -1402,14 +1472,14 @@ FCFS Gantt 图：
 |------|------------------------|-------|-------------------------------------|
 | 1    | PCB.h                  | 111   | 进程控制块数据结构定义               |
 | 2    | ProcessQueue.h         | 181   | 进程就绪队列管理类                   |
-| 3    | Scheduler.h            | 261   | 调度算法抽象基类                     |
+| 3    | Scheduler.h            | 275   | 调度算法抽象基类                     |
 | 4    | FCFS_Scheduler.h       | 89    | 先来先服务算法                       |
 | 5    | SJF_Scheduler.h        | 183   | 短作业优先 + 最短剩余时间优先算法     |
 | 6    | Priority_Scheduler.h   | 207   | 优先级调度（非抢占/抢占 + 老化机制）  |
-| 7    | RR_Scheduler.h         | 122   | 时间片轮转算法                       |
+| 7    | RR_Scheduler.h         | 120   | 时间片轮转算法                       |
 | 8    | HRRN_Scheduler.h       | 108   | 高响应比优先算法                     |
 | 9    | MLFQ_Scheduler.h       | 195   | 多级反馈队列算法                     |
 | 10   | AlgorithmComparator.h  | 222   | 算法比较与分析模块                   |
-| 11   | ProcessManager.h       | 386   | 进程管理模块                         |
-| 12   | main.cpp               | 737   | 主程序与菜单交互系统                 |
-|      | **合计**               |**2802**|                                     |
+| 11   | ProcessManager.h       | 400   | 进程管理模块                         |
+| 12   | main.cpp               | 735   | 主程序与菜单交互系统                 |
+|      | **合计**               |**2826**|                                     |
