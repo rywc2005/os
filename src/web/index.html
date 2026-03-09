@@ -1,0 +1,1427 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>进程调度算法可视化系统</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+<style>
+:root {
+    --bg: #0f172a;
+    --surface: #1e293b;
+    --surface2: #334155;
+    --border: #475569;
+    --text: #e2e8f0;
+    --text2: #94a3b8;
+    --accent: #38bdf8;
+    --accent2: #818cf8;
+    --green: #4ade80;
+    --red: #f87171;
+    --yellow: #fbbf24;
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+}
+.header {
+    background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+    border-bottom: 1px solid var(--border);
+    padding: 1.5rem 2rem;
+    text-align: center;
+}
+.header h1 {
+    font-size: 1.8rem;
+    font-weight: 700;
+    background: linear-gradient(90deg, var(--accent), var(--accent2));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+}
+.header p { color: var(--text2); margin-top: 0.3rem; font-size: 0.9rem; }
+
+.container { max-width: 1400px; margin: 0 auto; padding: 1.5rem; }
+
+/* Tabs */
+.tabs {
+    display: flex;
+    gap: 0.5rem;
+    margin-bottom: 1.5rem;
+    border-bottom: 2px solid var(--surface2);
+    padding-bottom: 0;
+}
+.tab-btn {
+    background: none;
+    border: none;
+    color: var(--text2);
+    padding: 0.75rem 1.5rem;
+    font-size: 0.95rem;
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    margin-bottom: -2px;
+    transition: all 0.2s;
+}
+.tab-btn:hover { color: var(--text); }
+.tab-btn.active {
+    color: var(--accent);
+    border-bottom-color: var(--accent);
+}
+.tab-content { display: none; }
+.tab-content.active { display: block; }
+
+/* Cards */
+.card {
+    background: var(--surface);
+    border: 1px solid var(--surface2);
+    border-radius: 12px;
+    padding: 1.5rem;
+    margin-bottom: 1.5rem;
+}
+.card h2 {
+    font-size: 1.1rem;
+    color: var(--accent);
+    margin-bottom: 1rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+/* Process Input */
+.input-section {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1.5rem;
+}
+@media (max-width: 800px) { .input-section { grid-template-columns: 1fr; } }
+
+.form-group { margin-bottom: 1rem; }
+.form-group label {
+    display: block;
+    font-size: 0.85rem;
+    color: var(--text2);
+    margin-bottom: 0.3rem;
+}
+.form-group input, .form-group select {
+    width: 100%;
+    padding: 0.5rem 0.75rem;
+    background: var(--bg);
+    border: 1px solid var(--surface2);
+    border-radius: 6px;
+    color: var(--text);
+    font-size: 0.9rem;
+}
+.form-group input:focus, .form-group select:focus {
+    outline: none;
+    border-color: var(--accent);
+}
+
+.btn {
+    padding: 0.6rem 1.2rem;
+    border: none;
+    border-radius: 6px;
+    font-size: 0.9rem;
+    cursor: pointer;
+    transition: all 0.2s;
+    font-weight: 500;
+}
+.btn-primary {
+    background: var(--accent);
+    color: #0f172a;
+}
+.btn-primary:hover { opacity: 0.85; }
+.btn-secondary {
+    background: var(--surface2);
+    color: var(--text);
+}
+.btn-secondary:hover { background: var(--border); }
+.btn-danger {
+    background: var(--red);
+    color: #fff;
+}
+.btn-danger:hover { opacity: 0.85; }
+.btn-group { display: flex; gap: 0.5rem; flex-wrap: wrap; margin-top: 1rem; }
+
+/* Process Table */
+.process-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.9rem;
+}
+.process-table th, .process-table td {
+    padding: 0.6rem 0.8rem;
+    text-align: center;
+    border-bottom: 1px solid var(--surface2);
+}
+.process-table th {
+    background: var(--bg);
+    color: var(--accent);
+    font-weight: 600;
+    position: sticky;
+    top: 0;
+}
+.process-table tr:hover td { background: rgba(56, 189, 248, 0.05); }
+.delete-btn {
+    background: none;
+    border: 1px solid var(--red);
+    color: var(--red);
+    padding: 0.2rem 0.5rem;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.8rem;
+}
+
+/* Gantt Chart */
+.gantt-wrapper { margin-bottom: 1.5rem; }
+.gantt-label {
+    font-size: 0.85rem;
+    color: var(--text2);
+    margin-bottom: 0.5rem;
+}
+.gantt-row {
+    display: flex;
+    align-items: center;
+    height: 36px;
+    margin-bottom: 2px;
+    position: relative;
+}
+.gantt-bar {
+    position: absolute;
+    height: 28px;
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: #fff;
+    text-shadow: 0 1px 2px rgba(0,0,0,0.3);
+    min-width: 2px;
+    transition: opacity 0.2s;
+    cursor: default;
+}
+.gantt-bar:hover { opacity: 0.85; }
+.gantt-bar.idle {
+    background: repeating-linear-gradient(45deg, var(--surface2), var(--surface2) 4px, var(--bg) 4px, var(--bg) 8px);
+    color: var(--text2);
+}
+.gantt-timeline {
+    display: flex;
+    position: relative;
+    height: 20px;
+    margin-top: 2px;
+    font-size: 0.7rem;
+    color: var(--text2);
+}
+.gantt-tick {
+    position: absolute;
+    transform: translateX(-50%);
+}
+
+/* Metric Cards */
+.metric-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+    gap: 1rem;
+}
+.metric-card {
+    background: var(--bg);
+    border: 1px solid var(--surface2);
+    border-radius: 8px;
+    padding: 1rem;
+    text-align: center;
+}
+.metric-value {
+    font-size: 1.8rem;
+    font-weight: 700;
+    color: var(--accent);
+}
+.metric-label {
+    font-size: 0.8rem;
+    color: var(--text2);
+    margin-top: 0.3rem;
+}
+
+/* Comparison Table */
+.comp-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.85rem;
+}
+.comp-table th, .comp-table td {
+    padding: 0.6rem 0.8rem;
+    text-align: center;
+    border-bottom: 1px solid var(--surface2);
+}
+.comp-table th {
+    background: var(--bg);
+    color: var(--accent);
+    position: sticky;
+    top: 0;
+}
+.comp-table .best {
+    color: var(--green);
+    font-weight: 700;
+}
+
+/* Algorithm selector */
+.algo-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-bottom: 1rem;
+}
+.algo-chip {
+    padding: 0.4rem 0.8rem;
+    border: 1px solid var(--surface2);
+    border-radius: 20px;
+    font-size: 0.85rem;
+    cursor: pointer;
+    transition: all 0.2s;
+    user-select: none;
+}
+.algo-chip.selected {
+    border-color: var(--accent);
+    background: rgba(56, 189, 248, 0.15);
+    color: var(--accent);
+}
+.algo-chip:hover { border-color: var(--accent); }
+
+/* Charts container */
+.chart-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1.5rem;
+}
+@media (max-width: 900px) { .chart-grid { grid-template-columns: 1fr; } }
+.chart-box {
+    background: var(--bg);
+    border: 1px solid var(--surface2);
+    border-radius: 8px;
+    padding: 1rem;
+}
+.chart-box canvas { max-height: 300px; }
+
+/* Toast */
+.toast {
+    position: fixed;
+    bottom: 2rem;
+    right: 2rem;
+    background: var(--green);
+    color: #0f172a;
+    padding: 0.8rem 1.5rem;
+    border-radius: 8px;
+    font-weight: 600;
+    font-size: 0.9rem;
+    opacity: 0;
+    transition: opacity 0.3s;
+    pointer-events: none;
+    z-index: 999;
+}
+.toast.show { opacity: 1; }
+
+/* Loading */
+.loading {
+    text-align: center;
+    padding: 3rem;
+    color: var(--text2);
+}
+.spinner {
+    width: 40px; height: 40px;
+    border: 3px solid var(--surface2);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+    margin: 0 auto 1rem;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.preset-btns { margin-top: 0.5rem; }
+</style>
+</head>
+<body>
+
+<div class="header">
+    <h1>⚙ 进程调度算法可视化系统</h1>
+    <p>Process Scheduling Algorithm Visualization — 操作系统课程设计</p>
+</div>
+
+<div class="container">
+    <!-- Tabs -->
+    <div class="tabs">
+        <button class="tab-btn active" data-tab="input">📝 进程输入</button>
+        <button class="tab-btn" data-tab="gantt">📊 Gantt 图</button>
+        <button class="tab-btn" data-tab="compare">📈 算法对比</button>
+        <button class="tab-btn" data-tab="detail">📋 详细结果</button>
+    </div>
+
+    <!-- Tab 1: Process Input -->
+    <div id="tab-input" class="tab-content active">
+        <div class="input-section">
+            <div class="card">
+                <h2>➕ 添加进程</h2>
+                <div class="form-group">
+                    <label>进程名称</label>
+                    <input type="text" id="pName" placeholder="如 P1">
+                </div>
+                <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:0.8rem;">
+                    <div class="form-group">
+                        <label>到达时间</label>
+                        <input type="number" id="pArrival" value="0" min="0">
+                    </div>
+                    <div class="form-group">
+                        <label>服务时间</label>
+                        <input type="number" id="pBurst" value="1" min="1">
+                    </div>
+                    <div class="form-group">
+                        <label>优先级</label>
+                        <input type="number" id="pPriority" value="0" min="0">
+                    </div>
+                </div>
+                <div class="btn-group">
+                    <button class="btn btn-primary" onclick="addProcess()">添加进程</button>
+                    <button class="btn btn-secondary" onclick="addRandomProcesses()">随机生成 5 个</button>
+                    <button class="btn btn-danger" onclick="clearProcesses()">清空全部</button>
+                </div>
+                <div class="preset-btns">
+                    <label style="font-size:0.85rem;color:var(--text2)">预设用例：</label>
+                    <div class="btn-group" style="margin-top:0.3rem">
+                        <button class="btn btn-secondary" onclick="loadPreset(1)">经典5进程</button>
+                        <button class="btn btn-secondary" onclick="loadPreset(2)">同时到达</button>
+                        <button class="btn btn-secondary" onclick="loadPreset(3)">10进程</button>
+                        <button class="btn btn-secondary" onclick="loadPreset(4)">长短混合</button>
+                        <button class="btn btn-secondary" onclick="loadPreset(5)">间隔到达</button>
+                    </div>
+                </div>
+            </div>
+            <div class="card">
+                <h2>📋 当前进程列表 (<span id="processCount">0</span> 个)</h2>
+                <div style="max-height:400px;overflow-y:auto;">
+                    <table class="process-table">
+                        <thead>
+                        <tr><th>PID</th><th>名称</th><th>到达</th><th>服务</th><th>优先级</th><th></th></tr>
+                        </thead>
+                        <tbody id="processTableBody"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <h2>🚀 运行调度算法</h2>
+            <p style="font-size:0.85rem;color:var(--text2);margin-bottom:1rem">选择要运行的算法（可多选），然后点击"开始调度"</p>
+            <div class="algo-chips" id="algoChips"></div>
+            <div class="btn-group">
+                <button class="btn btn-primary" onclick="runScheduling()" style="font-size:1rem;padding:0.8rem 2rem">▶ 开始调度</button>
+                <button class="btn btn-secondary" onclick="selectAllAlgos()">全选</button>
+                <button class="btn btn-secondary" onclick="loadJsonData()">📂 加载 JSON 数据</button>
+                <input type="file" id="jsonFileInput" accept=".json" style="display:none" onchange="handleJsonFile(event)">
+            </div>
+        </div>
+    </div>
+
+    <!-- Tab 2: Gantt Chart -->
+    <div id="tab-gantt" class="tab-content">
+        <div class="card" id="ganttContainer">
+            <h2>📊 Gantt 图可视化</h2>
+            <p class="loading" id="ganttPlaceholder">请先在"进程输入"页添加进程并运行调度算法</p>
+        </div>
+    </div>
+
+    <!-- Tab 3: Comparison -->
+    <div id="tab-compare" class="tab-content">
+        <div class="card" id="compareContainer">
+            <h2>📈 多算法性能对比</h2>
+            <p class="loading" id="comparePlaceholder">请先运行调度算法</p>
+        </div>
+    </div>
+
+    <!-- Tab 4: Detail -->
+    <div id="tab-detail" class="tab-content">
+        <div class="card" id="detailContainer">
+            <h2>📋 详细调度结果</h2>
+            <p class="loading" id="detailPlaceholder">请先运行调度算法</p>
+        </div>
+    </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ==========================
+// State
+// ==========================
+let processes = [];
+let nextPid = 1;
+let schedulingResults = [];
+
+const COLORS = [
+    '#38bdf8','#818cf8','#4ade80','#fbbf24','#f87171',
+    '#a78bfa','#fb923c','#2dd4bf','#e879f9','#f472b6',
+    '#34d399','#60a5fa','#facc15','#c084fc','#fb7185'
+];
+
+const ALGORITHMS = [
+    { id:'fcfs',    name:'先来先服务(FCFS)',         type:'non-preemptive' },
+    { id:'sjf',     name:'短作业优先(SJF)',           type:'non-preemptive' },
+    { id:'srtf',    name:'最短剩余时间优先(SRTF)',    type:'preemptive' },
+    { id:'priNP',   name:'优先级调度(非抢占)',        type:'non-preemptive' },
+    { id:'priP',    name:'优先级调度(抢占)',          type:'preemptive' },
+    { id:'rr',      name:'时间片轮转(RR, q=2)',      type:'preemptive' },
+    { id:'hrrn',    name:'高响应比优先(HRRN)',        type:'non-preemptive' },
+    { id:'mlfq',    name:'多级反馈队列(MLFQ)',        type:'preemptive' }
+];
+
+let selectedAlgos = new Set(['fcfs','sjf','srtf','rr','hrrn']);
+
+// ==========================
+// Presets
+// ==========================
+const PRESETS = {
+    1: [
+        {name:'P1',arrivalTime:0,burstTime:8,priority:3},
+        {name:'P2',arrivalTime:1,burstTime:4,priority:1},
+        {name:'P3',arrivalTime:2,burstTime:9,priority:4},
+        {name:'P4',arrivalTime:3,burstTime:5,priority:2},
+        {name:'P5',arrivalTime:4,burstTime:2,priority:5}
+    ],
+    2: [
+        {name:'P1',arrivalTime:0,burstTime:10,priority:3},
+        {name:'P2',arrivalTime:0,burstTime:5,priority:1},
+        {name:'P3',arrivalTime:0,burstTime:8,priority:4},
+        {name:'P4',arrivalTime:0,burstTime:3,priority:2},
+        {name:'P5',arrivalTime:0,burstTime:6,priority:5}
+    ],
+    3: [
+        {name:'A',arrivalTime:0,burstTime:6,priority:3},
+        {name:'B',arrivalTime:1,burstTime:3,priority:5},
+        {name:'C',arrivalTime:2,burstTime:8,priority:1},
+        {name:'D',arrivalTime:3,burstTime:2,priority:4},
+        {name:'E',arrivalTime:5,burstTime:4,priority:2},
+        {name:'F',arrivalTime:6,burstTime:7,priority:6},
+        {name:'G',arrivalTime:8,burstTime:5,priority:3},
+        {name:'H',arrivalTime:10,burstTime:1,priority:7},
+        {name:'I',arrivalTime:12,burstTime:9,priority:2},
+        {name:'J',arrivalTime:15,burstTime:3,priority:4}
+    ],
+    4: [
+        {name:'Short1',arrivalTime:0,burstTime:1,priority:3},
+        {name:'Long1',arrivalTime:0,burstTime:20,priority:2},
+        {name:'Short2',arrivalTime:2,burstTime:2,priority:4},
+        {name:'Mid1',arrivalTime:3,burstTime:8,priority:1},
+        {name:'Short3',arrivalTime:5,burstTime:1,priority:5},
+        {name:'Long2',arrivalTime:6,burstTime:15,priority:3},
+        {name:'Short4',arrivalTime:8,burstTime:3,priority:2}
+    ],
+    5: [
+        {name:'P1',arrivalTime:0,burstTime:4,priority:2},
+        {name:'P2',arrivalTime:5,burstTime:3,priority:1},
+        {name:'P3',arrivalTime:10,burstTime:5,priority:3},
+        {name:'P4',arrivalTime:15,burstTime:2,priority:4},
+        {name:'P5',arrivalTime:20,burstTime:6,priority:2}
+    ]
+};
+
+// ==========================
+// Scheduling Algorithms (JS implementation)
+// ==========================
+function deepCopyProcs(procs) {
+    return procs.map(p => ({
+        ...p,
+        remainingTime: p.burstTime,
+        startTime: -1,
+        completionTime: 0,
+        turnaroundTime: 0,
+        weightedTurnaround: 0,
+        waitingTime: 0,
+        responseTime: 0,
+        state: 'NEW',
+        hasStarted: false,
+        currentQueue: 0
+    }));
+}
+
+function calcMetrics(p) {
+    p.turnaroundTime = p.completionTime - p.arrivalTime;
+    p.waitingTime = p.turnaroundTime - p.burstTime;
+    p.weightedTurnaround = p.burstTime > 0 ? p.turnaroundTime / p.burstTime : 0;
+    p.responseTime = p.startTime - p.arrivalTime;
+}
+
+function computeStats(procs, gantt) {
+    const n = procs.length;
+    if (n === 0) return {};
+    const avgTT = procs.reduce((s,p) => s+p.turnaroundTime, 0) / n;
+    const avgWT = procs.reduce((s,p) => s+p.waitingTime, 0) / n;
+    const avgRT = procs.reduce((s,p) => s+p.responseTime, 0) / n;
+    const avgWTT = procs.reduce((s,p) => s+p.weightedTurnaround, 0) / n;
+    let totalTime = 0, busyTime = 0;
+    if (gantt.length > 0) {
+        totalTime = gantt[gantt.length-1].end - gantt[0].start;
+        busyTime = gantt.filter(e => e.process !== 'IDLE').reduce((s,e) => s + (e.end - e.start), 0);
+    }
+    const cpuUtil = totalTime > 0 ? (busyTime / totalTime * 100) : 0;
+    const throughput = totalTime > 0 ? n / totalTime : 0;
+    return { avgTurnaroundTime: avgTT, avgWaitingTime: avgWT, avgResponseTime: avgRT,
+             avgWeightedTurnaround: avgWTT, cpuUtilization: cpuUtil, throughput };
+}
+
+function mergeEvent(gantt, name, start, end) {
+    if (gantt.length > 0 && gantt[gantt.length-1].process === name && gantt[gantt.length-1].end === start) {
+        gantt[gantt.length-1].end = end;
+    } else {
+        gantt.push({process: name, start, end});
+    }
+}
+
+// FCFS
+function scheduleFCFS(inputProcs) {
+    const procs = deepCopyProcs(inputProcs).sort((a,b) => a.arrivalTime - b.arrivalTime || a.pid - b.pid);
+    const gantt = [];
+    let time = 0;
+    for (const p of procs) {
+        if (time < p.arrivalTime) {
+            mergeEvent(gantt, 'IDLE', time, p.arrivalTime);
+            time = p.arrivalTime;
+        }
+        if (!p.hasStarted) { p.startTime = time; p.hasStarted = true; }
+        mergeEvent(gantt, p.name, time, time + p.burstTime);
+        time += p.burstTime;
+        p.remainingTime = 0;
+        p.completionTime = time;
+        p.state = 'TERMINATED';
+        calcMetrics(p);
+    }
+    return { procs, gantt, metrics: computeStats(procs, gantt) };
+}
+
+// SJF non-preemptive
+function scheduleSJF(inputProcs) {
+    const procs = deepCopyProcs(inputProcs);
+    const gantt = [];
+    let time = 0, completed = 0, n = procs.length;
+    const done = new Array(n).fill(false);
+    while (completed < n) {
+        let ready = [];
+        for (let i = 0; i < n; i++) {
+            if (!done[i] && procs[i].arrivalTime <= time) ready.push(i);
+        }
+        if (ready.length === 0) {
+            let next = Infinity;
+            for (let i = 0; i < n; i++) if (!done[i]) next = Math.min(next, procs[i].arrivalTime);
+            mergeEvent(gantt, 'IDLE', time, next);
+            time = next;
+            continue;
+        }
+        ready.sort((a,b) => procs[a].burstTime - procs[b].burstTime || procs[a].arrivalTime - procs[b].arrivalTime);
+        let idx = ready[0];
+        let p = procs[idx];
+        if (!p.hasStarted) { p.startTime = time; p.hasStarted = true; }
+        mergeEvent(gantt, p.name, time, time + p.burstTime);
+        time += p.burstTime;
+        p.remainingTime = 0;
+        p.completionTime = time;
+        p.state = 'TERMINATED';
+        calcMetrics(p);
+        done[idx] = true;
+        completed++;
+    }
+    return { procs, gantt, metrics: computeStats(procs, gantt) };
+}
+
+// SRTF preemptive
+function scheduleSRTF(inputProcs) {
+    const procs = deepCopyProcs(inputProcs);
+    const gantt = [];
+    let time = 0, completed = 0, n = procs.length;
+    while (completed < n) {
+        let ready = [];
+        for (let i = 0; i < n; i++) {
+            if (procs[i].arrivalTime <= time && procs[i].state !== 'TERMINATED') ready.push(i);
+        }
+        if (ready.length === 0) {
+            let next = Infinity;
+            for (let i = 0; i < n; i++) if (procs[i].state !== 'TERMINATED') next = Math.min(next, procs[i].arrivalTime);
+            mergeEvent(gantt, 'IDLE', time, next);
+            time = next;
+            continue;
+        }
+        ready.sort((a,b) => procs[a].remainingTime - procs[b].remainingTime || procs[a].arrivalTime - procs[b].arrivalTime);
+        let idx = ready[0];
+        let p = procs[idx];
+        if (!p.hasStarted) { p.startTime = time; p.hasStarted = true; }
+        // Find next event: new arrival or completion
+        let nextEvent = time + p.remainingTime;
+        for (let i = 0; i < n; i++) {
+            if (procs[i].arrivalTime > time && procs[i].state !== 'TERMINATED') {
+                nextEvent = Math.min(nextEvent, procs[i].arrivalTime);
+            }
+        }
+        let exec = nextEvent - time;
+        mergeEvent(gantt, p.name, time, time + exec);
+        p.remainingTime -= exec;
+        time += exec;
+        if (p.remainingTime === 0) {
+            p.completionTime = time;
+            p.state = 'TERMINATED';
+            calcMetrics(p);
+            completed++;
+        }
+    }
+    return { procs, gantt, metrics: computeStats(procs, gantt) };
+}
+
+// Priority non-preemptive
+function schedulePriorityNP(inputProcs) {
+    const procs = deepCopyProcs(inputProcs);
+    const gantt = [];
+    let time = 0, completed = 0, n = procs.length;
+    const done = new Array(n).fill(false);
+    while (completed < n) {
+        let ready = [];
+        for (let i = 0; i < n; i++) {
+            if (!done[i] && procs[i].arrivalTime <= time) ready.push(i);
+        }
+        if (ready.length === 0) {
+            let next = Infinity;
+            for (let i = 0; i < n; i++) if (!done[i]) next = Math.min(next, procs[i].arrivalTime);
+            mergeEvent(gantt, 'IDLE', time, next);
+            time = next;
+            continue;
+        }
+        ready.sort((a,b) => procs[a].priority - procs[b].priority || procs[a].arrivalTime - procs[b].arrivalTime);
+        let idx = ready[0];
+        let p = procs[idx];
+        if (!p.hasStarted) { p.startTime = time; p.hasStarted = true; }
+        mergeEvent(gantt, p.name, time, time + p.burstTime);
+        time += p.burstTime;
+        p.remainingTime = 0;
+        p.completionTime = time;
+        p.state = 'TERMINATED';
+        calcMetrics(p);
+        done[idx] = true;
+        completed++;
+    }
+    return { procs, gantt, metrics: computeStats(procs, gantt) };
+}
+
+// Priority preemptive
+function schedulePriorityP(inputProcs) {
+    const procs = deepCopyProcs(inputProcs);
+    const gantt = [];
+    let time = 0, completed = 0, n = procs.length;
+    while (completed < n) {
+        let ready = [];
+        for (let i = 0; i < n; i++) {
+            if (procs[i].arrivalTime <= time && procs[i].state !== 'TERMINATED') ready.push(i);
+        }
+        if (ready.length === 0) {
+            let next = Infinity;
+            for (let i = 0; i < n; i++) if (procs[i].state !== 'TERMINATED') next = Math.min(next, procs[i].arrivalTime);
+            mergeEvent(gantt, 'IDLE', time, next);
+            time = next;
+            continue;
+        }
+        ready.sort((a,b) => procs[a].priority - procs[b].priority || procs[a].arrivalTime - procs[b].arrivalTime);
+        let idx = ready[0];
+        let p = procs[idx];
+        if (!p.hasStarted) { p.startTime = time; p.hasStarted = true; }
+        let nextEvent = time + p.remainingTime;
+        for (let i = 0; i < n; i++) {
+            if (procs[i].arrivalTime > time && procs[i].state !== 'TERMINATED') {
+                nextEvent = Math.min(nextEvent, procs[i].arrivalTime);
+            }
+        }
+        let exec = nextEvent - time;
+        mergeEvent(gantt, p.name, time, time + exec);
+        p.remainingTime -= exec;
+        time += exec;
+        if (p.remainingTime === 0) {
+            p.completionTime = time;
+            p.state = 'TERMINATED';
+            calcMetrics(p);
+            completed++;
+        }
+    }
+    return { procs, gantt, metrics: computeStats(procs, gantt) };
+}
+
+// RR
+function scheduleRR(inputProcs, quantum = 2) {
+    const procs = deepCopyProcs(inputProcs).sort((a,b) => a.arrivalTime - b.arrivalTime || a.pid - b.pid);
+    const gantt = [];
+    let time = 0, completed = 0, n = procs.length;
+    const queue = [];
+    let nextAdmit = 0;
+    // Admit initial
+    while (nextAdmit < n && procs[nextAdmit].arrivalTime <= time) {
+        queue.push(nextAdmit);
+        nextAdmit++;
+    }
+    while (completed < n) {
+        if (queue.length === 0) {
+            if (nextAdmit < n) {
+                mergeEvent(gantt, 'IDLE', time, procs[nextAdmit].arrivalTime);
+                time = procs[nextAdmit].arrivalTime;
+                while (nextAdmit < n && procs[nextAdmit].arrivalTime <= time) {
+                    queue.push(nextAdmit);
+                    nextAdmit++;
+                }
+            }
+            continue;
+        }
+        let idx = queue.shift();
+        let p = procs[idx];
+        if (!p.hasStarted) { p.startTime = time; p.hasStarted = true; }
+        let exec = Math.min(quantum, p.remainingTime);
+        mergeEvent(gantt, p.name, time, time + exec);
+        time += exec;
+        p.remainingTime -= exec;
+        // Admit new arrivals before rotating
+        while (nextAdmit < n && procs[nextAdmit].arrivalTime <= time) {
+            queue.push(nextAdmit);
+            nextAdmit++;
+        }
+        if (p.remainingTime === 0) {
+            p.completionTime = time;
+            p.state = 'TERMINATED';
+            calcMetrics(p);
+            completed++;
+        } else {
+            queue.push(idx);
+        }
+    }
+    return { procs, gantt, metrics: computeStats(procs, gantt) };
+}
+
+// HRRN
+function scheduleHRRN(inputProcs) {
+    const procs = deepCopyProcs(inputProcs);
+    const gantt = [];
+    let time = 0, completed = 0, n = procs.length;
+    const done = new Array(n).fill(false);
+    while (completed < n) {
+        let ready = [];
+        for (let i = 0; i < n; i++) {
+            if (!done[i] && procs[i].arrivalTime <= time) ready.push(i);
+        }
+        if (ready.length === 0) {
+            let next = Infinity;
+            for (let i = 0; i < n; i++) if (!done[i]) next = Math.min(next, procs[i].arrivalTime);
+            mergeEvent(gantt, 'IDLE', time, next);
+            time = next;
+            continue;
+        }
+        // Calculate response ratio
+        let best = -1, bestRatio = -1;
+        for (let i of ready) {
+            let w = time - procs[i].arrivalTime;
+            let ratio = (w + procs[i].burstTime) / procs[i].burstTime;
+            if (ratio > bestRatio || (Math.abs(ratio - bestRatio) < 1e-9 && procs[i].arrivalTime < procs[best].arrivalTime)) {
+                bestRatio = ratio;
+                best = i;
+            }
+        }
+        let p = procs[best];
+        if (!p.hasStarted) { p.startTime = time; p.hasStarted = true; }
+        mergeEvent(gantt, p.name, time, time + p.burstTime);
+        time += p.burstTime;
+        p.remainingTime = 0;
+        p.completionTime = time;
+        p.state = 'TERMINATED';
+        calcMetrics(p);
+        done[best] = true;
+        completed++;
+    }
+    return { procs, gantt, metrics: computeStats(procs, gantt) };
+}
+
+// MLFQ
+function scheduleMLFQ(inputProcs, numQueues = 3, quantums = [1,2,4]) {
+    const procs = deepCopyProcs(inputProcs).sort((a,b) => a.arrivalTime - b.arrivalTime || a.pid - b.pid);
+    const gantt = [];
+    let time = 0, completed = 0, n = procs.length;
+    const queues = Array.from({length: numQueues}, () => []);
+    let nextAdmit = 0;
+
+    while (nextAdmit < n && procs[nextAdmit].arrivalTime <= time) {
+        queues[0].push(nextAdmit);
+        nextAdmit++;
+    }
+
+    let safetyCounter = 0;
+    while (completed < n && safetyCounter < 100000) {
+        safetyCounter++;
+        // Admit new
+        while (nextAdmit < n && procs[nextAdmit].arrivalTime <= time) {
+            procs[nextAdmit].currentQueue = 0;
+            queues[0].push(nextAdmit);
+            nextAdmit++;
+        }
+
+        // Find highest non-empty queue
+        let activeQ = -1;
+        for (let q = 0; q < numQueues; q++) {
+            if (queues[q].length > 0) { activeQ = q; break; }
+        }
+
+        if (activeQ === -1) {
+            if (nextAdmit < n) {
+                mergeEvent(gantt, 'IDLE', time, procs[nextAdmit].arrivalTime);
+                time = procs[nextAdmit].arrivalTime;
+            }
+            continue;
+        }
+
+        let idx = queues[activeQ].shift();
+        let p = procs[idx];
+        if (!p.hasStarted) { p.startTime = time; p.hasStarted = true; }
+
+        let quantum = quantums[Math.min(activeQ, quantums.length - 1)];
+        let exec = Math.min(quantum, p.remainingTime);
+
+        // Check preemption by new arrival
+        if (nextAdmit < n && procs[nextAdmit].arrivalTime > time && procs[nextAdmit].arrivalTime < time + exec) {
+            exec = procs[nextAdmit].arrivalTime - time;
+        }
+
+        mergeEvent(gantt, p.name, time, time + exec);
+        p.remainingTime -= exec;
+        time += exec;
+
+        // Admit during execution
+        while (nextAdmit < n && procs[nextAdmit].arrivalTime <= time) {
+            procs[nextAdmit].currentQueue = 0;
+            queues[0].push(nextAdmit);
+            nextAdmit++;
+        }
+
+        if (p.remainingTime === 0) {
+            p.completionTime = time;
+            p.state = 'TERMINATED';
+            calcMetrics(p);
+            completed++;
+        } else if (exec < quantum) {
+            // Preempted, stay in same queue
+            queues[activeQ].push(idx);
+        } else {
+            // Quantum expired, demote
+            let nextQ = Math.min(activeQ + 1, numQueues - 1);
+            p.currentQueue = nextQ;
+            queues[nextQ].push(idx);
+        }
+    }
+    return { procs, gantt, metrics: computeStats(procs, gantt) };
+}
+
+const ALGO_MAP = {
+    fcfs:  (p) => scheduleFCFS(p),
+    sjf:   (p) => scheduleSJF(p),
+    srtf:  (p) => scheduleSRTF(p),
+    priNP: (p) => schedulePriorityNP(p),
+    priP:  (p) => schedulePriorityP(p),
+    rr:    (p) => scheduleRR(p, 2),
+    hrrn:  (p) => scheduleHRRN(p),
+    mlfq:  (p) => scheduleMLFQ(p, 3, [1, 2, 4])
+};
+
+// ==========================
+// UI Initialization
+// ==========================
+function initAlgoChips() {
+    const container = document.getElementById('algoChips');
+    container.innerHTML = '';
+    ALGORITHMS.forEach(algo => {
+        const chip = document.createElement('div');
+        chip.className = 'algo-chip' + (selectedAlgos.has(algo.id) ? ' selected' : '');
+        chip.textContent = algo.name;
+        chip.onclick = () => {
+            if (selectedAlgos.has(algo.id)) selectedAlgos.delete(algo.id);
+            else selectedAlgos.add(algo.id);
+            chip.classList.toggle('selected');
+        };
+        container.appendChild(chip);
+    });
+}
+
+function selectAllAlgos() {
+    ALGORITHMS.forEach(a => selectedAlgos.add(a.id));
+    initAlgoChips();
+}
+
+// ==========================
+// Process Management
+// ==========================
+function renderProcessTable() {
+    const tbody = document.getElementById('processTableBody');
+    tbody.innerHTML = '';
+    processes.forEach((p, i) => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `<td>${p.pid}</td><td>${p.name}</td><td>${p.arrivalTime}</td><td>${p.burstTime}</td><td>${p.priority}</td>
+            <td><button class="delete-btn" onclick="deleteProcess(${i})">✕</button></td>`;
+        tbody.appendChild(tr);
+    });
+    document.getElementById('processCount').textContent = processes.length;
+}
+
+function addProcess() {
+    const name = document.getElementById('pName').value.trim() || ('P' + nextPid);
+    const arrival = parseInt(document.getElementById('pArrival').value) || 0;
+    const burst = Math.max(1, parseInt(document.getElementById('pBurst').value) || 1);
+    const priority = parseInt(document.getElementById('pPriority').value) || 0;
+    processes.push({ pid: nextPid++, name, arrivalTime: Math.max(0, arrival), burstTime: burst, priority: Math.max(0, priority) });
+    document.getElementById('pName').value = '';
+    renderProcessTable();
+    showToast('已添加进程 ' + name);
+}
+
+function deleteProcess(index) {
+    processes.splice(index, 1);
+    renderProcessTable();
+}
+
+function clearProcesses() {
+    processes = [];
+    nextPid = 1;
+    renderProcessTable();
+}
+
+function loadPreset(id) {
+    processes = [];
+    nextPid = 1;
+    PRESETS[id].forEach(p => {
+        processes.push({ pid: nextPid++, ...p });
+    });
+    renderProcessTable();
+    showToast('已加载预设用例 ' + id);
+}
+
+function addRandomProcesses() {
+    for (let i = 0; i < 5; i++) {
+        processes.push({
+            pid: nextPid,
+            name: 'P' + nextPid,
+            arrivalTime: Math.floor(Math.random() * 15),
+            burstTime: 1 + Math.floor(Math.random() * 12),
+            priority: Math.floor(Math.random() * 8)
+        });
+        nextPid++;
+    }
+    renderProcessTable();
+    showToast('已随机生成 5 个进程');
+}
+
+// ==========================
+// Load JSON from C++ export
+// ==========================
+function loadJsonData() {
+    document.getElementById('jsonFileInput').click();
+}
+function handleJsonFile(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = function(e) {
+        try {
+            const data = JSON.parse(e.target.result);
+            // Load processes
+            if (data.processes) {
+                processes = data.processes.map(p => ({
+                    pid: p.pid, name: p.name, arrivalTime: p.arrivalTime,
+                    burstTime: p.burstTime, priority: p.priority
+                }));
+                nextPid = Math.max(...processes.map(p => p.pid)) + 1;
+                renderProcessTable();
+            }
+            // Load algorithm results
+            if (data.algorithms) {
+                schedulingResults = data.algorithms.map(a => ({
+                    name: a.name,
+                    procs: a.results,
+                    gantt: a.ganttChart,
+                    metrics: a.metrics
+                }));
+                renderAllResults();
+                showToast('已加载 JSON 数据（' + data.algorithms.length + ' 种算法）');
+                switchTab('gantt');
+            }
+        } catch (err) {
+            showToast('JSON 解析失败: ' + err.message);
+        }
+    };
+    reader.readAsText(file);
+    event.target.value = '';
+}
+
+// ==========================
+// Run Scheduling
+// ==========================
+function runScheduling() {
+    if (processes.length === 0) {
+        showToast('请先添加进程！');
+        return;
+    }
+    if (selectedAlgos.size === 0) {
+        showToast('请至少选择一种算法！');
+        return;
+    }
+
+    schedulingResults = [];
+    const inputProcs = processes.map(p => ({...p}));
+
+    ALGORITHMS.forEach(algo => {
+        if (selectedAlgos.has(algo.id) && ALGO_MAP[algo.id]) {
+            const result = ALGO_MAP[algo.id](inputProcs);
+            schedulingResults.push({ name: algo.name, ...result });
+        }
+    });
+
+    renderAllResults();
+    showToast('调度完成！已运行 ' + schedulingResults.length + ' 种算法');
+    switchTab('gantt');
+}
+
+// ==========================
+// Render Results
+// ==========================
+let chartInstances = [];
+
+function renderAllResults() {
+    renderGantt();
+    renderComparison();
+    renderDetail();
+}
+
+function getColorForProcess(name) {
+    if (name === 'IDLE') return null;
+    // Deterministic color based on process name
+    let hash = 0;
+    for (let i = 0; i < name.length; i++) hash = name.charCodeAt(i) + ((hash << 5) - hash);
+    return COLORS[Math.abs(hash) % COLORS.length];
+}
+
+// Build a consistent color map from all unique process names across results
+function buildColorMap() {
+    const names = new Set();
+    schedulingResults.forEach(r => {
+        r.gantt.forEach(e => { if (e.process !== 'IDLE') names.add(e.process); });
+    });
+    const map = {};
+    let i = 0;
+    [...names].sort().forEach(n => { map[n] = COLORS[i % COLORS.length]; i++; });
+    return map;
+}
+
+function renderGantt() {
+    const container = document.getElementById('ganttContainer');
+    if (schedulingResults.length === 0) {
+        container.innerHTML = '<h2>📊 Gantt 图可视化</h2><p class="loading">请先运行调度算法</p>';
+        return;
+    }
+
+    const colorMap = buildColorMap();
+    let maxEnd = 0;
+    schedulingResults.forEach(r => {
+        r.gantt.forEach(e => { if (e.end > maxEnd) maxEnd = e.end; });
+    });
+    if (maxEnd === 0) maxEnd = 1;
+
+    let html = '<h2>📊 Gantt 图可视化</h2>';
+
+    // Legend
+    html += '<div style="display:flex;flex-wrap:wrap;gap:0.8rem;margin-bottom:1.5rem;">';
+    Object.entries(colorMap).forEach(([name, color]) => {
+        html += `<div style="display:flex;align-items:center;gap:0.3rem;font-size:0.85rem;">
+            <div style="width:14px;height:14px;border-radius:3px;background:${color}"></div>${name}</div>`;
+    });
+    html += `<div style="display:flex;align-items:center;gap:0.3rem;font-size:0.85rem;">
+        <div style="width:14px;height:14px;border-radius:3px;background:repeating-linear-gradient(45deg,var(--surface2),var(--surface2) 3px,var(--bg) 3px,var(--bg) 6px)"></div>IDLE</div>`;
+    html += '</div>';
+
+    schedulingResults.forEach(result => {
+        html += `<div class="gantt-wrapper">`;
+        html += `<div class="gantt-label"><strong>${result.name}</strong></div>`;
+        html += `<div class="gantt-row" style="position:relative;height:36px;">`;
+
+        result.gantt.forEach(event => {
+            const left = (event.start / maxEnd * 100).toFixed(2);
+            const width = ((event.end - event.start) / maxEnd * 100).toFixed(2);
+            const color = colorMap[event.process] || '';
+            const isIdle = event.process === 'IDLE';
+            const label = (event.end - event.start) >= maxEnd * 0.03 ? event.process : '';
+            const title = `${event.process}: [${event.start}, ${event.end})  时长=${event.end - event.start}`;
+            html += `<div class="gantt-bar${isIdle ? ' idle' : ''}" 
+                style="left:${left}%;width:${width}%;${isIdle ? '' : 'background:'+color}"
+                title="${title}">${label}</div>`;
+        });
+
+        html += `</div>`;
+
+        // Timeline ticks
+        html += `<div class="gantt-timeline" style="position:relative;height:18px;">`;
+        const ticks = new Set();
+        result.gantt.forEach(e => { ticks.add(e.start); ticks.add(e.end); });
+        // Limit tick density
+        const sortedTicks = [...ticks].sort((a,b) => a - b);
+        const minGap = maxEnd * 0.025;
+        let lastRendered = -Infinity;
+        sortedTicks.forEach(t => {
+            if (t - lastRendered >= minGap || t === 0 || t === sortedTicks[sortedTicks.length-1]) {
+                const left = (t / maxEnd * 100).toFixed(2);
+                html += `<span class="gantt-tick" style="left:${left}%">${t}</span>`;
+                lastRendered = t;
+            }
+        });
+        html += `</div></div>`;
+    });
+
+    container.innerHTML = html;
+}
+
+function renderComparison() {
+    const container = document.getElementById('compareContainer');
+    if (schedulingResults.length === 0) {
+        container.innerHTML = '<h2>📈 多算法性能对比</h2><p class="loading">请先运行调度算法</p>';
+        return;
+    }
+
+    // Destroy old charts
+    chartInstances.forEach(c => c.destroy());
+    chartInstances = [];
+
+    let html = '<h2>📈 多算法性能对比</h2>';
+
+    // Comparison table
+    html += '<div style="overflow-x:auto;margin-bottom:1.5rem"><table class="comp-table"><thead><tr>';
+    html += '<th>算法</th><th>平均周转</th><th>平均带权周转</th><th>平均等待</th><th>平均响应</th><th>CPU利用率</th><th>吞吐量</th>';
+    html += '</tr></thead><tbody>';
+
+    // Find best for each metric
+    const fields = ['avgTurnaroundTime','avgWeightedTurnaround','avgWaitingTime','avgResponseTime','cpuUtilization','throughput'];
+    const best = {};
+    fields.forEach(f => {
+        let bestVal = f === 'cpuUtilization' || f === 'throughput' ? -Infinity : Infinity;
+        let bestIdx = 0;
+        schedulingResults.forEach((r,i) => {
+            const v = r.metrics[f];
+            if (f === 'cpuUtilization' || f === 'throughput') {
+                if (v > bestVal) { bestVal = v; bestIdx = i; }
+            } else {
+                if (v < bestVal) { bestVal = v; bestIdx = i; }
+            }
+        });
+        best[f] = bestIdx;
+    });
+
+    schedulingResults.forEach((r, ri) => {
+        html += '<tr>';
+        html += `<td style="text-align:left;font-weight:600">${r.name}</td>`;
+        fields.forEach(f => {
+            const v = r.metrics[f];
+            const isBest = best[f] === ri;
+            const formatted = f === 'cpuUtilization' ? v.toFixed(1) + '%' : f === 'throughput' ? v.toFixed(3) : v.toFixed(2);
+            html += `<td class="${isBest ? 'best' : ''}">${formatted}</td>`;
+        });
+        html += '</tr>';
+    });
+    html += '</tbody></table></div>';
+
+    // Chart containers
+    html += '<div class="chart-grid">';
+    html += '<div class="chart-box"><canvas id="chartTurnaround"></canvas></div>';
+    html += '<div class="chart-box"><canvas id="chartWaiting"></canvas></div>';
+    html += '<div class="chart-box"><canvas id="chartResponse"></canvas></div>';
+    html += '<div class="chart-box"><canvas id="chartRadar"></canvas></div>';
+    html += '</div>';
+
+    container.innerHTML = html;
+
+    // Create charts
+    const labels = schedulingResults.map(r => r.name.replace(/\(.*?\)/g, '').trim());
+    const bgColors = schedulingResults.map((_, i) => COLORS[i % COLORS.length]);
+
+    function makeBarChart(canvasId, label, dataKey) {
+        const ctx = document.getElementById(canvasId);
+        if (!ctx) return;
+        const c = new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels,
+                datasets: [{
+                    label, data: schedulingResults.map(r => parseFloat(r.metrics[dataKey].toFixed(2))),
+                    backgroundColor: bgColors.map(c => c + '99'),
+                    borderColor: bgColors, borderWidth: 1
+                }]
+            },
+            options: {
+                responsive: true,
+                plugins: {
+                    legend: { display: false },
+                    title: { display: true, text: label, color: '#e2e8f0' }
+                },
+                scales: {
+                    x: { ticks: { color: '#94a3b8', font: { size: 10 } }, grid: { color: '#334155' } },
+                    y: { ticks: { color: '#94a3b8' }, grid: { color: '#334155' }, beginAtZero: true }
+                }
+            }
+        });
+        chartInstances.push(c);
+    }
+
+    makeBarChart('chartTurnaround', '平均周转时间', 'avgTurnaroundTime');
+    makeBarChart('chartWaiting', '平均等待时间', 'avgWaitingTime');
+    makeBarChart('chartResponse', '平均响应时间', 'avgResponseTime');
+
+    // Radar chart
+    const radarCtx = document.getElementById('chartRadar');
+    if (radarCtx) {
+        // Normalize metrics to 0-1 (inverted for "lower is better")
+        const metricKeys = ['avgTurnaroundTime','avgWaitingTime','avgResponseTime','avgWeightedTurnaround'];
+        const metricLabels = ['周转时间','等待时间','响应时间','带权周转'];
+        const maxVals = metricKeys.map(k => Math.max(...schedulingResults.map(r => r.metrics[k]), 0.01));
+
+        const datasets = schedulingResults.map((r, i) => ({
+            label: labels[i],
+            data: metricKeys.map((k, ki) => parseFloat((1 - r.metrics[k] / maxVals[ki]).toFixed(3))),
+            borderColor: COLORS[i % COLORS.length],
+            backgroundColor: COLORS[i % COLORS.length] + '22',
+            pointBackgroundColor: COLORS[i % COLORS.length],
+            borderWidth: 2
+        }));
+
+        const rc = new Chart(radarCtx, {
+            type: 'radar',
+            data: { labels: metricLabels, datasets },
+            options: {
+                responsive: true,
+                plugins: {
+                    title: { display: true, text: '综合性能雷达图（越大越好）', color: '#e2e8f0' },
+                    legend: { labels: { color: '#94a3b8', font: { size: 10 } } }
+                },
+                scales: {
+                    r: {
+                        beginAtZero: true, max: 1,
+                        ticks: { display: false },
+                        grid: { color: '#334155' },
+                        pointLabels: { color: '#94a3b8' }
+                    }
+                }
+            }
+        });
+        chartInstances.push(rc);
+    }
+}
+
+function renderDetail() {
+    const container = document.getElementById('detailContainer');
+    if (schedulingResults.length === 0) {
+        container.innerHTML = '<h2>📋 详细调度结果</h2><p class="loading">请先运行调度算法</p>';
+        return;
+    }
+
+    let html = '<h2>📋 详细调度结果</h2>';
+
+    // Algorithm selector
+    html += '<div class="algo-chips" style="margin-bottom:1rem">';
+    schedulingResults.forEach((r, i) => {
+        html += `<div class="algo-chip selected" onclick="toggleDetail(this, ${i})" data-idx="${i}">${r.name}</div>`;
+    });
+    html += '</div>';
+
+    schedulingResults.forEach((result, ri) => {
+        html += `<div class="detail-block" id="detail-${ri}">`;
+        html += `<div class="card" style="margin-bottom:1rem">`;
+        html += `<h2 style="font-size:1rem">${result.name}</h2>`;
+
+        // Metric cards
+        const m = result.metrics;
+        html += '<div class="metric-grid" style="margin-bottom:1rem">';
+        html += `<div class="metric-card"><div class="metric-value">${m.avgTurnaroundTime.toFixed(2)}</div><div class="metric-label">平均周转时间</div></div>`;
+        html += `<div class="metric-card"><div class="metric-value">${m.avgWaitingTime.toFixed(2)}</div><div class="metric-label">平均等待时间</div></div>`;
+        html += `<div class="metric-card"><div class="metric-value">${m.avgResponseTime.toFixed(2)}</div><div class="metric-label">平均响应时间</div></div>`;
+        html += `<div class="metric-card"><div class="metric-value">${m.avgWeightedTurnaround.toFixed(2)}</div><div class="metric-label">平均带权周转</div></div>`;
+        html += `<div class="metric-card"><div class="metric-value">${m.cpuUtilization.toFixed(1)}%</div><div class="metric-label">CPU 利用率</div></div>`;
+        html += `<div class="metric-card"><div class="metric-value">${m.throughput.toFixed(3)}</div><div class="metric-label">吞吐量</div></div>`;
+        html += '</div>';
+
+        // Per-process result table
+        html += '<div style="overflow-x:auto"><table class="comp-table"><thead><tr>';
+        html += '<th>PID</th><th>名称</th><th>到达</th><th>服务</th><th>优先级</th><th>开始</th><th>完成</th><th>周转</th><th>带权周转</th><th>等待</th><th>响应</th>';
+        html += '</tr></thead><tbody>';
+        result.procs.forEach(p => {
+            html += `<tr>
+                <td>${p.pid}</td><td>${p.name}</td><td>${p.arrivalTime}</td><td>${p.burstTime}</td>
+                <td>${p.priority}</td><td>${p.startTime}</td><td>${p.completionTime}</td>
+                <td>${p.turnaroundTime}</td><td>${(p.weightedTurnaround||0).toFixed(2)}</td>
+                <td>${p.waitingTime}</td><td>${p.responseTime}</td></tr>`;
+        });
+        html += '</tbody></table></div>';
+        html += '</div></div>';
+    });
+
+    container.innerHTML = html;
+}
+
+function toggleDetail(chip, idx) {
+    chip.classList.toggle('selected');
+    const block = document.getElementById('detail-' + idx);
+    if (block) block.style.display = chip.classList.contains('selected') ? 'block' : 'none';
+}
+
+// ==========================
+// Utilities
+// ==========================
+function switchTab(tabName) {
+    document.querySelectorAll('.tab-btn').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.tab === tabName);
+    });
+    document.querySelectorAll('.tab-content').forEach(tc => {
+        tc.classList.toggle('active', tc.id === 'tab-' + tabName);
+    });
+}
+
+document.querySelectorAll('.tab-btn').forEach(btn => {
+    btn.addEventListener('click', () => switchTab(btn.dataset.tab));
+});
+
+function showToast(msg) {
+    const t = document.getElementById('toast');
+    t.textContent = msg;
+    t.classList.add('show');
+    setTimeout(() => t.classList.remove('show'), 2000);
+}
+
+// ==========================
+// Init
+// ==========================
+initAlgoChips();
+renderProcessTable();
+
+// Auto-load JSON if available (when opened from C++ export)
+fetch('schedule_data.json')
+    .then(r => { if (r.ok) return r.json(); throw new Error('no file'); })
+    .then(data => {
+        if (data.processes) {
+            processes = data.processes.map(p => ({
+                pid: p.pid, name: p.name, arrivalTime: p.arrivalTime,
+                burstTime: p.burstTime, priority: p.priority
+            }));
+            nextPid = Math.max(...processes.map(p => p.pid)) + 1;
+            renderProcessTable();
+        }
+        if (data.algorithms) {
+            schedulingResults = data.algorithms.map(a => ({
+                name: a.name,
+                procs: a.results,
+                gantt: a.ganttChart,
+                metrics: a.metrics
+            }));
+            renderAllResults();
+            switchTab('gantt');
+            showToast('已自动加载 C++ 导出的调度数据');
+        }
+    })
+    .catch(() => {});
+</script>
+</body>
+</html>

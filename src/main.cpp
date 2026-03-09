@@ -44,6 +44,7 @@
 #include "MLFQ_Scheduler.h"
 #include "AlgorithmComparator.h"
 #include "ProcessManager.h"
+#include "JsonExporter.h"
 
 using namespace std;
 
@@ -52,6 +53,7 @@ using namespace std;
 // ======================================================================
 void printDetailedLog(Scheduler* scheduler);
 void analyzeTimeQuantumEffect();
+void exportWebVisualization();
 
 // ======================================================================
 // 全局对象
@@ -121,6 +123,7 @@ void showMainMenu() {
     cout << "  │  [4] 查看算法说明                                  │\n";
     cout << "  │  [5] 运行演示模式（预设数据 + 全部算法）           │\n";
     cout << "  │  [6] RR 时间片影响分析                             │\n";
+    cout << "  │  [7] 导出 Web 可视化报告                           │\n";
     cout << "  │  [0] 退出系统                                      │\n";
     cout << "  │                                                    │\n";
     cout << "  └────────────────────────────────────────────────────┘\n";
@@ -692,6 +695,52 @@ void analyzeTimeQuantumEffect() {
 }
 
 // ======================================================================
+// 导出 Web 可视化报告
+// ======================================================================
+void exportWebVisualization() {
+    if (!processManager.hasProcesses()) {
+        cout << "\n  ✗ 当前没有进程，请先在进程管理中添加进程。\n";
+        pauseScreen();
+        return;
+    }
+
+    processManager.displayProcesses();
+
+    cout << "\n  将对当前进程运行全部算法并生成 Web 可视化报告...\n\n";
+
+    // 创建全部调度器
+    FCFS_Scheduler fcfs;
+    SJF_Scheduler sjf(false);
+    SJF_Scheduler srtf(true);
+    Priority_Scheduler priNP(false);
+    Priority_Scheduler priP(true);
+    RR_Scheduler rr2(2);
+    RR_Scheduler rr4(4);
+    HRRN_Scheduler hrrn;
+    MLFQ_Scheduler mlfq(3);
+    mlfq.configure(3, {1, 2, 4});
+
+    vector<Scheduler*> allSchedulers = {
+        &fcfs, &sjf, &srtf, &priNP, &priP,
+        &rr2, &rr4, &hrrn, &mlfq
+    };
+
+    // 执行所有算法
+    for (auto* s : allSchedulers) {
+        s->setProcesses(processManager.getProcesses());
+        s->schedule();
+    }
+
+    // 导出 JSON 并打开浏览器
+    string jsonPath = "web/schedule_data.json";
+    string htmlPath = "web/index.html";
+    JsonExporter::exportAndOpen(allSchedulers, processManager.getProcesses(),
+                                jsonPath, htmlPath);
+
+    pauseScreen();
+}
+
+// ======================================================================
 // 主程序入口
 // ======================================================================
 int main() {
@@ -704,7 +753,7 @@ int main() {
 
     while (true) {
         showMainMenu();
-        int choice = readInt("  请选择功能: ", 0, 6);
+        int choice = readInt("  请选择功能: ", 0, 7);
 
         switch (choice) {
             case 1:
@@ -724,6 +773,9 @@ int main() {
                 break;
             case 6:
                 analyzeTimeQuantumEffect();
+                break;
+            case 7:
+                exportWebVisualization();
                 break;
             case 0:
                 cout << "\n  感谢使用进程调度算法模拟系统！再见！\n\n";
